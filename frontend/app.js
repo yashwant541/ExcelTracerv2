@@ -79,8 +79,17 @@
     $("#d-close").addEventListener("click", closeDrawer);
     $("#drawer-scrim").addEventListener("click", closeDrawer);
     $("#d-flow").addEventListener("click", () => { if (DRAWER) { closeDrawer(); showFlowchart(DRAWER.cell); } });
+    $("#d-steps").addEventListener("click", () => { if (DRAWER) { closeDrawer(); showSteps(DRAWER.cell); } });
     $$("#d-tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
     $("#flow-back").addEventListener("click", () => show("trace"));
+    $("#steps-back").addEventListener("click", () => show("trace"));
+    $("#dbg-first").addEventListener("click", () => dbgSet(0));
+    $("#dbg-prev").addEventListener("click", () => dbgSet(STEPS.i - 1));
+    $("#dbg-next").addEventListener("click", () => dbgSet(STEPS.i + 1));
+    $("#dbg-last").addEventListener("click", () => dbgSet(STEPS.data.steps.length - 1));
+    $("#dbg-play").addEventListener("click", dbgPlay);
+    $("#steps-copy").addEventListener("click", () => { navigator.clipboard.writeText($("#steps-why").textContent); toast("Copied", "ok"); });
+    $("#steps-json").addEventListener("click", dbgDownload);
     $("#flow-zin").addEventListener("click", () => FLOW && FLOW._zoom && FLOW._zoom(0.8));
     $("#flow-zout").addEventListener("click", () => FLOW && FLOW._zoom && FLOW._zoom(1.25));
     $("#flow-fit").addEventListener("click", () => FLOW && FLOW._fit && FLOW._fit());
@@ -232,7 +241,8 @@
         el("div", { class: "rj-formula", text: c.formula }),
         el("div", { class: "rj-narr" }, (c.narrative || []).map((n) => el("p", { text: n }))),
         el("div", { class: "rj-actions" }, [
-          el("button", { class: "btn ghost small", text: "Open full trace →", onclick: () => explainCell(c.key) }),
+          el("button", { class: "btn ghost small", text: "Full trace →", onclick: () => explainCell(c.key) }),
+          el("button", { class: "btn ghost small", text: "Steps →", onclick: () => showSteps(c.key) }),
           el("button", { class: "btn ghost small", text: "Flowchart →", onclick: () => showFlowchart(c.key) }),
         ]),
       ])));
@@ -604,6 +614,102 @@
       buildAndRenderFlow();
       if (FLOW._fit) FLOW._fit();
     } catch (e) { toast(e.message, "err"); }
+  }
+
+  // ================================================================ STEPS / DEBUGGER
+  let STEPS = { data: null, i: 0, timer: null };
+
+  async function showSteps(cell) {
+    try {
+      const [tr, why] = await Promise.all([
+        call("/api/transformation", { method: "POST", json: { session_id: S.sid, cell } }),
+        call("/api/explain-plain", { method: "POST", json: { session_id: S.sid, cell } }).catch(() => null),
+      ]);
+      const d = tr.transformation;
+      STEPS = { data: d, i: 0, timer: null };
+      show("steps");
+      $("#steps-title").textContent = "Transformation — " + d.key;
+      $("#steps-sub").textContent = d.is_formula
+        ? `${d.key} = ${d.final_repr}  ·  ${d.steps.length} steps`
+        : `${d.key} is an input cell`;
+      $("#steps-formula").textContent = d.formula || "(input cell)";
+      $("#steps-why").textContent = (why && why.text) || "—";
+      renderSteps();
+      dbgSet(0);
+    } catch (e) { toast(e.message, "err"); }
+  }
+
+  function renderSteps() {
+    const box = $("#steps-list"); box.innerHTML = "";
+    (STEPS.data.steps || []).forEach((s, idx) => {
+      const card = el("div", { class: "step", "data-i": idx, id: "step-" + idx });
+      card.appendChild(el("div", { class: "step-head" }, [
+        el("span", { class: "step-n", text: s.n }),
+        el("span", { class: "step-title", text: s.title }),
+        el("span", { class: "step-tag " + s.kind, text: (s.kind || "").replace(/_/g, " ") }),
+      ]));
+      if (s.substitutions) {
+        card.appendChild(el("div", { class: "step-subs" }, s.substitutions.map((u) =>
+          el("span", { class: "chip", text: `${u.ref} = ${u.repr}` }))));
+      }
+      if (s.expr_in && s.result_repr != null) {
+        card.appendChild(el("div", { class: "step-expr" }, [s.expr_in, "  →  ",
+          el("span", { class: "step-result", text: s.result_repr })]));
+      } else if (s.result_repr != null && s.kind !== "final" && s.kind !== "original") {
+        card.appendChild(el("div", { class: "step-expr" }, [
+          el("span", { class: "step-result", text: s.result_repr })]));
+      }
+      if (s.kind === "condition" && s.condition) {
+        card.appendChild(el("div", { class: "step-expr", text: `${s.condition} is ${s.condition_repr} → ${(s.branch || "").toUpperCase()} branch` }));
+      }
+      const d = s.detail || {};
+      if (d.rows && d.function) {   // VLOOKUP-style lookup table
+        const t = el("table", { class: "step-lk" });
+        (d.rows).forEach((r) => t.appendChild(el("tr", { class: r.matched ? "match" : "" },
+          (r.cells || []).map((c) => el("td", { text: fmt(c) })))));
+        card.appendChild(t);
+      }
+      if (d.matches || d.preview) {   // SUMIFS-style matching records
+        const rows = (d.preview || d.matches || []).slice(0, 12);
+        const t = el("table", { class: "step-lk" });
+        t.appendChild(el("tr", {}, [el("th", { text: "row" }),
+          ...(d.criteria_ranges || []).map((c) => el("th", { text: c })),
+          d.agg_range ? el("th", { text: d.agg_range }) : null, el("th", { text: "" })]));
+        rows.forEach((r) => t.appendChild(el("tr", { class: r.matched ? "match" : "" }, [
+          el("td", { text: r.row }),
+          ...((r.criteria || []).map((c) => el("td", { text: fmt(c) }))),
+          d.agg_range ? el("td", { text: fmt(r.value) }) : null,
+          el("td", { text: r.matched ? "✓" : "" }),
+        ])));
+        card.appendChild(t);
+        card.appendChild(el("div", { class: "muted small", text: `${d.matched_rows} of ${d.scanned_rows} rows matched` }));
+      }
+      if (s.formula) card.appendChild(el("div", { class: "step-formula", text: s.formula }));
+      box.appendChild(card);
+    });
+  }
+
+  function dbgSet(i) {
+    const n = STEPS.data.steps.length;
+    STEPS.i = Math.max(0, Math.min(n - 1, i));
+    $$("#steps-list .step").forEach((c, idx) => {
+      c.classList.toggle("done", idx <= STEPS.i);
+      c.classList.toggle("current", idx === STEPS.i);
+    });
+    const cur = $("#step-" + STEPS.i);
+    if (cur) cur.scrollIntoView({ block: "center", behavior: "smooth" });
+    $("#dbg-status").textContent = `Step ${STEPS.i + 1} of ${n} — ${STEPS.data.steps[STEPS.i].title}`;
+    if (STEPS.i >= n - 1 && STEPS.timer) { clearInterval(STEPS.timer); STEPS.timer = null; $("#dbg-play").innerHTML = "&#9654;"; }
+  }
+  function dbgPlay() {
+    if (STEPS.timer) { clearInterval(STEPS.timer); STEPS.timer = null; $("#dbg-play").innerHTML = "&#9654;"; return; }
+    $("#dbg-play").innerHTML = "&#9208;";
+    STEPS.timer = setInterval(() => dbgSet(STEPS.i + 1), 900);
+  }
+  function dbgDownload() {
+    const blob = new Blob([JSON.stringify(STEPS.data, null, 2)], { type: "application/json" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: STEPS.data.key.replace(/[!:]/g, "_") + "_transformation.json" });
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

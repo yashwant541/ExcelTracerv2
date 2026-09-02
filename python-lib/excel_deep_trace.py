@@ -53,6 +53,38 @@ _VOLATILE = {"NOW", "TODAY", "RAND", "RANDBETWEEN", "RANDARRAY", "OFFSET", "INDI
 _LOOKUP_FUNCS = {"VLOOKUP", "HLOOKUP", "XLOOKUP", "LOOKUP", "INDEX", "MATCH", "CHOOSE"}
 _COND_FUNCS = {"IF", "IFS", "IFERROR", "IFNA", "SWITCH", "AND", "OR", "NOT"}
 _AGG_FUNCS = {"SUM", "AVERAGE", "MIN", "MAX", "COUNT", "COUNTA", "PRODUCT", "MEDIAN"}
+_CONDAGG_FUNCS = {"SUMIF", "SUMIFS", "COUNTIF", "COUNTIFS", "AVERAGEIF", "AVERAGEIFS"}
+_CRIT_RE = re.compile(r"^\s*(<=|>=|<>|=|<|>)?\s*(.*)$", re.S)
+
+
+def _crit_match(cell: Any, crit: Any) -> bool:
+    """Excel SUMIFS/COUNTIFS criteria matching: numbers, text (case-insensitive),
+    operators (>, <, <>, …) and * / ? wildcards."""
+    if _is_err(crit):
+        return False
+    if isinstance(crit, (int, float)) and not isinstance(crit, bool):
+        cn = _num(cell)
+        return isinstance(cn, (int, float)) and not isinstance(cell, bool) and float(cn) == float(crit)
+    m = _CRIT_RE.match(str("" if crit is None else crit))
+    op, rest = (m.group(1) or "="), (m.group(2) or "").strip()
+    cn, rn = _num(cell), _num(rest)
+    both_num = (isinstance(cn, (int, float)) and isinstance(rn, (int, float))
+                and not isinstance(cell, bool))
+    if op in ("<", "<=", ">", ">="):
+        if not both_num:
+            return False
+        return {"<": cn < rn, "<=": cn <= rn, ">": cn > rn, ">=": cn >= rn}[op]
+    neg = op == "<>"
+    if both_num:
+        eq = float(cn) == float(rn)
+        return (not eq) if neg else eq
+    cval = "" if cell is None else str(cell)
+    if "*" in rest or "?" in rest:
+        rx = "^" + re.escape(rest).replace(r"\*", ".*").replace(r"\?", ".") + "$"
+        eq = re.match(rx, cval, re.I) is not None
+    else:
+        eq = cval.strip().lower() == rest.strip().lower() or (_is_empty(cell) and rest == "")
+    return (not eq) if neg else eq
 
 
 # =============================================================================
@@ -444,7 +476,13 @@ _BIN_SRC = {"**": "^"}
 _CMP_SRC = {"==": "=", "!=": "<>"}
 
 
-def src(n: Node) -> str:
+def src(n: Node, resolved: Optional[dict] = None) -> str:
+    """Excel-ish rendering. If ``resolved`` (``id(node) -> str``) is given, any node
+    already in it is shown as that string instead of its sub-expression - this drives
+    the step-by-step formula transformation."""
+    if resolved is not None and id(n) in resolved:
+        return resolved[id(n)]
+    S = lambda x: src(x, resolved)  # noqa: E731
     if isinstance(n, Num):
         return n.text
     if isinstance(n, Str):
@@ -462,21 +500,77 @@ def src(n: Node) -> str:
     if isinstance(n, RangeRef):
         return ("%s!" % n.sheet if n.sheet else "") + n.a1
     if isinstance(n, Paren):
-        return "(%s)" % src(n.inner)
+        return "(%s)" % S(n.inner)
     if isinstance(n, Unary):
-        return "%s%s" % (n.op, src(n.operand))
+        return "%s%s" % (n.op, S(n.operand))
     if isinstance(n, Bin):
-        return "%s %s %s" % (src(n.left), _BIN_SRC.get(n.op, n.op), src(n.right))
+        return "%s %s %s" % (S(n.left), _BIN_SRC.get(n.op, n.op), S(n.right))
     if isinstance(n, Cmp):
-        return "%s %s %s" % (src(n.left), _CMP_SRC.get(n.op, n.op), src(n.right))
+        return "%s %s %s" % (S(n.left), _CMP_SRC.get(n.op, n.op), S(n.right))
     if isinstance(n, ConcatOp):
-        return "%s & %s" % (src(n.left), src(n.right))
+        return "%s & %s" % (S(n.left), S(n.right))
     if isinstance(n, If):
-        parts = [src(n.cond), src(n.then)] + ([src(n.els)] if n.els is not None else [])
+        parts = [S(n.cond), S(n.then)] + ([S(n.els)] if n.els is not None else [])
         return "IF(%s)" % ", ".join(parts)
     if isinstance(n, Call):
-        return "%s(%s)" % (n.name, ", ".join(src(a) for a in n.args))
+        return "%s(%s)" % (n.name, ", ".join(S(a) for a in n.args))
     return "?"
+
+
+_BIN_TITLE = {"+": "Addition", "-": "Subtraction", "*": "Multiplication",
+              "/": "Division", "**": "Power"}
+
+
+def _repr_json(v):
+    return "∅" if v is None else (_repr(v) if not isinstance(v, str) else v)
+
+
+def _tr_kind(nd: Node, engine) -> Optional[str]:
+    if isinstance(nd, Call):
+        u = nd.name.upper()
+        if u in _LOOKUP_FUNCS:
+            return "lookup"
+        if u in _CONDAGG_FUNCS:
+            return "conditional_sum"
+        if u in _AGG_FUNCS or u == "SUMPRODUCT":
+            return "aggregation"
+        if u in ("IFERROR", "IFNA"):
+            return "error_handling"
+        if u in ("AND", "OR", "NOT", "SWITCH"):
+            return "logic"
+        return "function"
+    if isinstance(nd, If):
+        return "condition"
+    if isinstance(nd, Bin):
+        return "arithmetic"
+    if isinstance(nd, Unary):
+        return "arithmetic"
+    if isinstance(nd, Cmp):
+        return "comparison"
+    if isinstance(nd, ConcatOp):
+        return "text"
+    if isinstance(nd, CellRef):
+        ck = "%s!%s" % (nd.sheet or engine._book.default_sheet, nd.a1)
+        return "resolve_cell" if ck in engine.records else None
+    return None
+
+
+def _tr_title(nd: Node) -> str:
+    if isinstance(nd, Call):
+        return nd.name.upper()
+    if isinstance(nd, If):
+        return "IF"
+    if isinstance(nd, Bin):
+        return _BIN_TITLE.get(nd.op, nd.op)
+    if isinstance(nd, Unary):
+        return "Sign"
+    if isinstance(nd, Cmp):
+        return "Comparison"
+    if isinstance(nd, ConcatOp):
+        return "Text join"
+    if isinstance(nd, CellRef):
+        return "Resolve " + src(nd)
+    return type(nd).__name__
 
 
 # =============================================================================
@@ -630,6 +724,7 @@ class _Eval:
         self.notes: List[str] = []
         self._nid = 0
         self._stack: set = set()
+        self.record: Optional[dict] = None   # id(ast node) -> value, when recording
 
     # ---- node factory ----------------------------------------------------
     def _mk(self, kind, node, value, role, children=None, evaluated=True, **detail):
@@ -664,8 +759,20 @@ class _Eval:
         _, v = self.ev(node, 0, "root")
         return v
 
-    # ---- main dispatch ----------------------------------------------------
+    def value_recording(self, node) -> Any:
+        """Evaluate and remember every AST node's value in ``self.record``."""
+        self.record = {}
+        _, v = self.ev(node, 0, "root")
+        return v
+
+    # ---- main dispatch (records per-node values when self.record is set) --
     def ev(self, n: Node, depth: int, role: str = "root") -> Tuple[Optional[dict], Any]:
+        node, val = self._ev(n, depth, role)
+        if self.record is not None and not isinstance(n, Paren):
+            self.record[id(n)] = val
+        return node, val
+
+    def _ev(self, n: Node, depth: int, role: str = "root") -> Tuple[Optional[dict], Any]:
         if isinstance(n, Paren):
             return self.ev(n.inner, depth, role)
         if isinstance(n, Num):
@@ -865,6 +972,8 @@ class _Eval:
 
         if name in _AGG_FUNCS or name == "SUMPRODUCT":
             return self._agg(n, depth, role, name)
+        if name in _CONDAGG_FUNCS:
+            return self._condagg(n, depth, role, name)
 
         # generic scalar helper
         fn = _SCALAR.get(name)
@@ -1024,6 +1133,73 @@ class _Eval:
         else:  # pragma: no cover
             v = XlError("#N/A")
         return self._mk("agg", n, v, role, kids, func=name, n_values=len(nums)), v
+
+    def _flat_range(self, node):
+        if not isinstance(node, RangeRef):
+            _, v = self.ev(node, 0, "arg")
+            return [v]
+        grid = self.e._grid(node, self.e.max_expanded_range)
+        return [c for row in grid for c in row]
+
+    def _condagg(self, n: Call, depth: int, role: str, name: str):
+        """SUMIF(S) / COUNTIF(S) / AVERAGEIF(S) with the matching rows captured."""
+        kids = []
+        try:
+            single = name in ("SUMIF", "COUNTIF", "AVERAGEIF")
+            if single:
+                crit_ranges, crits = [n.args[0]], [n.args[1]]
+                agg_range = None if name == "COUNTIF" else (n.args[2] if len(n.args) > 2 else n.args[0])
+            elif name == "COUNTIFS":
+                crit_ranges, crits, agg_range = list(n.args[0::2]), list(n.args[1::2]), None
+            else:  # SUMIFS / AVERAGEIFS
+                agg_range = n.args[0]
+                crit_ranges, crits = list(n.args[1::2]), list(n.args[2::2])
+
+            crit_vals = []
+            for c in crits:
+                cn, cv = self.ev(c, depth, "criteria")
+                kids.append(cn)
+                crit_vals.append(cv)
+            cr_grids = [self._flat_range(cr) for cr in crit_ranges]
+            agg_vals = self._flat_range(agg_range) if agg_range is not None else None
+            nrows = min((len(g) for g in cr_grids), default=0)
+
+            rows, total, count = [], 0.0, 0
+            for i in range(nrows):
+                matched = all(_crit_match(cr_grids[j][i], crit_vals[j]) for j in range(len(cr_grids)))
+                rec = {"row": i + 1, "matched": matched,
+                       "criteria": [_json(cr_grids[j][i]) for j in range(len(cr_grids))]}
+                if agg_vals is not None:
+                    rec["value"] = _json(agg_vals[i]) if i < len(agg_vals) else None
+                if matched:
+                    count += 1
+                    if agg_vals is not None and i < len(agg_vals):
+                        av = _num(agg_vals[i])
+                        if isinstance(av, (int, float)) and not isinstance(agg_vals[i], bool):
+                            total += float(av)
+                rows.append(rec)
+
+            if name.startswith("COUNT"):
+                v = count
+            elif name.startswith("AVERAGE"):
+                v = (total / count) if count else XlError("#DIV/0!")
+            else:
+                v = total
+
+            detail = {
+                "function": name,
+                "criteria_ranges": [src(cr) for cr in crit_ranges],
+                "criteria": [_repr(x) for x in crit_vals],
+                "agg_range": src(agg_range) if agg_range is not None else None,
+                "scanned_rows": nrows, "matched_rows": count,
+                "matches": [r for r in rows if r["matched"]][:200],
+                "preview": rows[:60],
+            }
+            return self._mk("condagg", n, v, role, kids, **detail), v
+        except Exception as exc:  # noqa: BLE001
+            self.notes.append("%s(): %s" % (name, exc))
+            v = XlError("#VALUE!")
+            return self._mk("condagg", n, v, role, kids, function=name), v
 
 
 # =============================================================================
@@ -1503,6 +1679,148 @@ class ExcelDeepTraceEngine:
 
     def narrate(self, key: str) -> List[str]:
         return self.expression_tree(key).get("narrative", [])
+
+    # ---------------------------------------------------------------- transformation
+    def formula_transformation(self, key: str, max_steps: int = 120) -> Dict[str, Any]:
+        """The formula reduced step by step - resolve cell refs, then evaluate each
+        sub-expression innermost-first, showing the running formula after each. This is
+        the "STEP 1 ... STEP N" view."""
+        k, rec = self._root_or_none(key)
+        if rec is None:
+            sheet, a1 = k.split("!", 1)
+            return {"key": k, "is_formula": False,
+                    "value": _json(self._book.cached(sheet, a1)), "steps": []}
+        if rec.root is None:
+            return {"key": k, "is_formula": True, "parse_error": True,
+                    "formula": rec.formula, "steps": []}
+
+        ev = _Eval(self, trace=False, max_depth=64)
+        final = ev.value_recording(rec.root)
+        resolved: Dict[int, str] = {}
+
+        def lit(v):
+            if _is_err(v):
+                return v.code
+            if _is_empty(v):
+                return "(blank)"
+            return _repr(v)
+
+        def fold(nd):
+            """render string for a leaf/constant node - its evaluated value if we have
+            one, else its literal text (an un-evaluated fallback like IFERROR's 0)."""
+            return lit(ev.record[id(nd)]) if id(nd) in ev.record else src(nd)
+
+        steps = [{"n": 1, "kind": "original", "title": "Original formula",
+                  "formula": rec.formula}]
+
+        # --- resolve input cell references (formula cells get their own step later) ---
+        subs, seen = [], set()
+        for nd in rec.root.walk():
+            if isinstance(nd, (Num, Str, Bool, Nan, ErrorLit)) and id(nd) not in resolved:
+                resolved[id(nd)] = fold(nd)
+            if isinstance(nd, CellRef):
+                ck = "%s!%s" % (nd.sheet or self._book.default_sheet, nd.a1)
+                if ck in self.records:
+                    continue
+                v = ev.record.get(id(nd))
+                resolved[id(nd)] = lit(v)
+                if src(nd) not in seen:
+                    seen.add(src(nd))
+                    subs.append({"ref": src(nd), "value": _json(v), "repr": _repr(v)})
+        if subs:
+            steps.append({"n": 2, "kind": "resolve_refs", "title": "Resolve cell references",
+                          "substitutions": subs, "formula": "=" + src(rec.root, resolved)})
+
+        # --- reduce innermost-first ---
+        order: List[Node] = []
+
+        def walk(nd):
+            for c in nd.kids():
+                walk(c)
+            order.append(nd)
+
+        walk(rec.root)
+
+        for nd in order:
+            if isinstance(nd, (Paren, RangeRef)):
+                continue
+            kind = _tr_kind(nd, self)
+            if kind is None:
+                if id(nd) not in resolved and id(nd) in ev.record \
+                        and isinstance(nd, (Num, Str, Bool, Nan, ErrorLit, CellRef, NameRef)):
+                    resolved[id(nd)] = lit(ev.record[id(nd)])
+                continue
+            v = ev.record.get(id(nd))
+            expr_in = src(nd, resolved)          # this sub-expression, children resolved
+            resolved[id(nd)] = lit(v)
+            step = {"n": len(steps) + 1, "kind": kind, "title": _tr_title(nd),
+                    "expr": src(nd), "expr_in": expr_in,
+                    "result": _json(v), "result_repr": _repr(v),
+                    "formula": "=" + src(rec.root, resolved)}
+            self._tr_enrich(step, nd, ev)
+            steps.append(step)
+            if len(steps) >= max_steps:
+                steps.append({"n": len(steps) + 1, "kind": "truncated",
+                              "title": "(further steps omitted)", "formula": step["formula"]})
+                break
+
+        steps.append({"n": len(steps) + 1, "kind": "final", "title": "Final result",
+                      "result": _json(final), "result_repr": _repr(final),
+                      "formula": "= " + (final.code if _is_err(final) else _repr(final))})
+        return {"key": k, "is_formula": True, "formula": rec.formula,
+                "final_value": _json(final), "final_repr": _repr(final),
+                "step_count": len(steps), "steps": steps}
+
+    def _tr_enrich(self, step: dict, nd: Node, ev: "_Eval") -> None:
+        if isinstance(nd, If):
+            cv = ev.record.get(id(nd.cond))
+            step["condition"] = src(nd.cond)
+            step["condition_repr"] = (cv.code if _is_err(cv) else _repr(cv))
+            step["branch"] = "error" if _is_err(cv) else ("true" if _truthy(cv) else "false")
+        if isinstance(nd, Call) and nd.name.upper() in ("IFERROR", "IFNA"):
+            av = ev.record.get(id(nd.args[0]))
+            step["errored"] = bool(_is_err(av))
+        if isinstance(nd, Call) and nd.name.upper() in _LOOKUP_FUNCS | _CONDAGG_FUNCS:
+            try:
+                tn, _ = _Eval(self, trace=True).ev(nd, 0, "root")
+                if tn.get("detail"):
+                    step["detail"] = tn["detail"]
+            except Exception:  # noqa: BLE001
+                pass
+
+    # ---------------------------------------------------------------- plain explanation
+    def explain_plain(self, key: str) -> Dict[str, Any]:
+        """A short, copy-pasteable "why is this number here" - the lineage of the value,
+        not the mechanics."""
+        tr = self.formula_transformation(key)
+        if not tr.get("is_formula"):
+            return {"key": tr["key"], "text": "%s = %s  (an input cell — entered directly)"
+                    % (tr["key"], _repr_json(tr.get("value")))}
+        lines = ["%s = %s" % (tr["key"], tr["final_repr"]), ""]
+        refs = next((s for s in tr["steps"] if s["kind"] == "resolve_refs"), None)
+        if refs:
+            for su in refs["substitutions"]:
+                lines.append("  %s = %s" % (su["ref"], su["repr"]))
+            lines.append("")
+        for s in tr["steps"]:
+            e = s.get("expr_in") or s.get("expr", "")
+            if s["kind"] == "lookup":
+                d = s.get("detail", {})
+                hit = (d.get("match_found") or d.get("matched_row") is not None
+                       or d.get("match_index") is not None)
+                lines.append("  %s  ->  %s%s" % (e, s["result_repr"], "" if hit else " (no match)"))
+            elif s["kind"] == "conditional_sum":
+                mm = s.get("detail", {}).get("matches", [])
+                parts = " + ".join(_repr_json(m.get("value")) for m in mm) or "0"
+                lines.append("  %s  ->  %s   (%s)" % (e, s["result_repr"], parts))
+            elif s["kind"] in ("arithmetic", "text", "comparison"):
+                lines.append("  %s  =  %s" % (e, s["result_repr"]))
+            elif s["kind"] == "condition":
+                lines.append("  %s is %s -> %s branch"
+                             % (s.get("condition"), s.get("condition_repr"),
+                                (s.get("branch") or "").upper()))
+        lines += ["", "= %s" % tr["final_repr"]]
+        return {"key": tr["key"], "final_repr": tr["final_repr"], "text": "\n".join(lines)}
 
     # ---------------------------------------------------------------- evaluated values
     def _cell_value_or_eval(self, key: str) -> Any:

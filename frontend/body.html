@@ -101,6 +101,40 @@
       </div>
     </section>
 
+    <!-- ===================== STEPS ===================== -->
+    <section id="view-steps" class="view hidden">
+      <button class="link-btn back" id="steps-back">&larr; Back to trace</button>
+      <div class="view-head">
+        <h1 id="steps-title">Formula transformation</h1>
+        <p class="muted" id="steps-sub"></p>
+      </div>
+
+      <div class="formula-box">
+        <div class="formula" id="steps-formula"></div>
+      </div>
+
+      <div class="dbg-bar">
+        <button class="icon-btn" id="dbg-first" title="First">&#8676;</button>
+        <button class="icon-btn" id="dbg-prev" title="Back">&#9664;</button>
+        <button class="icon-btn" id="dbg-play" title="Run">&#9654;</button>
+        <button class="icon-btn" id="dbg-next" title="Step">&#9654;&#9654;</button>
+        <button class="icon-btn" id="dbg-last" title="End">&#8677;</button>
+        <span class="dbg-status" id="dbg-status"></span>
+        <button class="btn ghost small" id="steps-copy" style="margin-left:auto">Copy "why"</button>
+        <button class="btn ghost small" id="steps-json">Download JSON</button>
+      </div>
+
+      <div class="steps-grid">
+        <div id="steps-list"></div>
+        <aside class="steps-side">
+          <div class="admin-section">
+            <h3>Why is this number here?</h3>
+            <pre class="code" id="steps-why"></pre>
+          </div>
+        </aside>
+      </div>
+    </section>
+
     <!-- ===================== FLOWCHART ===================== -->
     <section id="view-flow" class="view hidden">
       <button class="link-btn back" id="flow-back">&larr; Back to trace</button>
@@ -144,6 +178,7 @@
         <div id="d-sub" class="muted small"></div>
       </div>
       <div style="display:flex;gap:4px">
+        <button class="icon-btn" id="d-steps" title="Step-by-step transformation">&#8942;</button>
         <button class="icon-btn" id="d-flow" title="Open as flowchart">&#9906;</button>
         <button class="icon-btn" id="d-close" title="Close" style="font-size:17px">&times;</button>
       </div>

@@ -176,6 +176,31 @@ def api_journey():
         return _err(str(exc), 400)
 
 
+@app.route("/api/transformation", methods=["POST"])
+def api_transformation():
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        eng = _session(body["session_id"])["engine"]
+        return jsonify({"success": True,
+                        "transformation": eng.formula_transformation(body["cell"])})
+    except KeyError as exc:
+        return _err(str(exc), 404)
+    except Exception as exc:  # noqa: BLE001
+        return _err(str(exc), 400)
+
+
+@app.route("/api/explain-plain", methods=["POST"])
+def api_explain_plain():
+    body = request.get_json(force=True, silent=True) or {}
+    try:
+        eng = _session(body["session_id"])["engine"]
+        return jsonify({"success": True, **eng.explain_plain(body["cell"])})
+    except KeyError as exc:
+        return _err(str(exc), 404)
+    except Exception as exc:  # noqa: BLE001
+        return _err(str(exc), 400)
+
+
 @app.route("/api/tree", methods=["POST"])
 def api_tree():
     body = request.get_json(force=True, silent=True) or {}
