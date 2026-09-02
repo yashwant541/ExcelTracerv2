@@ -1,0 +1,2298 @@
+# MASTER BUILD PROMPT — EXCEL FORMULA FORENSICS & BACKTRACKING ENGINE
+
+## 1. PROJECT OBJECTIVE
+
+Build a production-quality Python application called:
+
+**Excel Formula Forensics & Backtracking Engine**
+
+The purpose of the application is to take an Excel workbook, allow the user to select any formula cell, and visually explain **exactly how Excel arrives at the final value**.
+
+The application must behave like a combination of:
+
+1. Excel Formula Evaluator
+2. Formula Debugger
+3. Dependency Tree Explorer
+4. Data Lineage Engine
+5. Formula Audit Engine
+6. Financial Model Review Tool
+7. Formula Anomaly Detector
+8. Impact Analysis Tool
+9. Interactive Calculation Flowchart
+
+The core principle is:
+
+> **Every number must have an explainable lineage.**
+
+The application must not merely show that Cell F2 depends on Cell A2. It must explain:
+
+* What the original formula is
+* Which functions are inside the formula
+* Which arguments each function receives
+* Where those arguments come from
+* Which rows/cells were matched
+* Which branches of IF/IFS were executed
+* Which branches were not executed
+* What intermediate values were produced
+* How arithmetic was performed
+* Which source cells contributed to the final result
+* Whether errors or anomalies exist
+* Whether the formula is consistent with surrounding formulas
+* What would be affected if an input cell changes
+
+---
+
+# 2. CORE USER EXPERIENCE
+
+The user should be able to:
+
+1. Load an `.xlsx` or `.xlsm` workbook.
+2. Select a worksheet.
+3. Select a target formula cell.
+4. Click:
+
+**Analyze Formula**
+
+The system then generates an interactive graph.
+
+Example:
+
+```text
+FINAL CELL
+Summary!F2
+₹57,500
+       |
+       v
+IFERROR
+       |
+       v
+MAIN CALCULATION
+       |
+       +-------------------+-------------------+
+       |                   |                   |
+       v                   v                   v
+   VLOOKUP             INDEX/MATCH          SUMIFS
+       |                   |                   |
+       v                   v                   v
+Customer Master          Rates             Commission
+       |                   |                   |
+       v                   v                   v
+   ₹50,000              1.10               ₹2,500
+       |                   |                   |
+       +---------+---------+                   |
+                 |                             |
+                 v                             |
+          50,000 × 1.10                       |
+                 |                             |
+                 v                             |
+              55,000                          |
+                 |                             |
+                 +---------------+-------------+
+                                 |
+                                 v
+                              57,500
+```
+
+Every node must be clickable.
+
+Clicking a node opens detailed information.
+
+---
+
+# 3. GRAPH DESIGN
+
+The graph is the primary interface.
+
+Use an interactive graph library such as:
+
+* Cytoscape.js
+* vis-network
+* React Flow
+* D3.js
+
+Choose the technology that provides the best combination of:
+
+* performance
+* zooming
+* panning
+* node expansion
+* edge labels
+* search
+* highlighting
+* layout control
+* large graph support
+
+The graph must support:
+
+* Zoom
+* Pan
+* Search
+* Expand
+* Collapse
+* Focus on node
+* Focus on dependency
+* Highlight path
+* Hide unrelated nodes
+* Show full lineage
+* Show upstream lineage
+* Show downstream lineage
+* Reset view
+* Mini-map
+* Node inspection
+* Edge inspection
+
+---
+
+# 4. COLOR SYSTEM
+
+Use a strict semantic color system.
+
+## Blue — Original Formula
+
+Represents:
+
+* Original formula
+* Main formula expression
+* Formula containers
+
+Example:
+
+```text
+=IFERROR(VLOOKUP(...),0)
+```
+
+## Purple — Lookup / Reference
+
+Represents:
+
+* VLOOKUP
+* XLOOKUP
+* HLOOKUP
+* INDEX
+* MATCH
+* XMATCH
+* LOOKUP
+* CHOOSE
+
+## Green — Successfully Resolved Value
+
+Represents:
+
+* Successfully retrieved source values
+* Valid inputs
+* Resolved references
+
+## Yellow — Calculation
+
+Represents:
+
+* Multiplication
+* Addition
+* Subtraction
+* Division
+* Aggregation
+* Intermediate calculation
+
+## Orange — Logic / Decision
+
+Represents:
+
+* IF
+* IFS
+* IFERROR
+* IFNA
+* AND
+* OR
+* NOT
+* SWITCH
+* Conditions
+
+## Red — Error / Critical Warning
+
+Represents:
+
+* #REF!
+* #VALUE!
+* #N/A
+* #DIV/0!
+* #NAME?
+* Broken reference
+* Failed lookup
+* Circular reference
+* Critical audit issue
+
+## Grey — Non-executed Branch
+
+Represents:
+
+* IF branches that were not executed
+* Unused fallback
+* Conditions that evaluated to FALSE
+* Unused calculation paths
+
+## Cyan — Workbook Dependency
+
+Represents:
+
+* Worksheet
+* Workbook
+* External workbook
+* Named range
+* Excel table
+
+## Brown — Hardcoded Input
+
+Represents:
+
+* Hardcoded number
+* Hardcoded text
+* Manual assumption
+* Manual override
+
+## Dark Green — Final Result
+
+Represents:
+
+* Final successfully calculated result
+
+---
+
+# 5. FORMULA TRANSFORMATION VIEW
+
+This is one of the most important features.
+
+The application must show the formula changing step by step.
+
+Example original formula:
+
+```excel
+=IFERROR(
+ VLOOKUP(A2,Customer_Master!A:D,4,FALSE)
+ *
+ INDEX(Rates!B:D,MATCH(B2,Rates!B:B,0),3)
+ +
+ SUMIFS(
+   Commission!D:D,
+   Commission!A:A,A2,
+   Commission!B:B,"Loan"
+ ),
+0
+)
+```
+
+The system should display:
+
+### STEP 1 — Original
+
+```text
+=IFERROR(
+ VLOOKUP(A2,...)
+ *
+ INDEX(...MATCH(B2,...))
+ +
+ SUMIFS(...),
+ 0
+)
+```
+
+### STEP 2 — Resolve cell references
+
+```text
+A2 → "CUST1001"
+
+B2 → "India"
+```
+
+Formula becomes conceptually:
+
+```text
+=IFERROR(
+ VLOOKUP("CUST1001",...)
+ *
+ INDEX(...MATCH("India",...))
+ +
+ SUMIFS(...),
+ 0
+)
+```
+
+### STEP 3 — Resolve VLOOKUP
+
+```text
+VLOOKUP("CUST1001",Customer_Master!A:D,4,FALSE)
+
+→ matched row 15
+→ return cell D15
+→ value = 50,000
+```
+
+Formula becomes:
+
+```text
+=IFERROR(
+ 50000 *
+ INDEX(...MATCH("India",...))
+ +
+ SUMIFS(...),
+ 0
+)
+```
+
+### STEP 4 — Resolve MATCH
+
+```text
+MATCH("India",Rates!B:B,0)
+
+→ row 8
+```
+
+### STEP 5 — Resolve INDEX
+
+```text
+INDEX(Rates!B:D,8,3)
+
+→ Rates!D8
+→ 1.10
+```
+
+Formula becomes:
+
+```text
+=IFERROR(
+ 50000 * 1.10 +
+ SUMIFS(...),
+ 0
+)
+```
+
+### STEP 6 — Resolve SUMIFS
+
+```text
+SUMIFS(...)
+
+Matching rows:
+
+Commission!12 → 1,500
+Commission!27 → 1,000
+
+Total = 2,500
+```
+
+Formula becomes:
+
+```text
+=IFERROR(
+ 50000 * 1.10 + 2500,
+ 0
+)
+```
+
+### STEP 7 — Arithmetic
+
+```text
+50,000 × 1.10
+= 55,000
+
+55,000 + 2,500
+= 57,500
+```
+
+### STEP 8 — IFERROR
+
+```text
+Main calculation succeeded
+
+→ return 57,500
+```
+
+### FINAL
+
+```text
+Summary!F2 = ₹57,500
+```
+
+The application must visually display these transformations.
+
+---
+
+# 6. STEP-BY-STEP DEBUGGER
+
+Add a debugger toolbar:
+
+```text
+┌────────────────────────────────────────────┐
+│ ◀ Back │ ▶ Step │ ⏸ Pause │ ▶ Run │ End │
+└────────────────────────────────────────────┘
+```
+
+Display:
+
+```text
+Step 7 of 18
+Current operation:
+
+SUMIFS
+
+Status:
+Executing
+```
+
+When the user presses **Step**, move to the next operation.
+
+Highlight:
+
+* active node
+* active edge
+* current formula fragment
+* source cells
+* intermediate value
+
+The user must be able to move:
+
+* Forward
+* Backward
+* To beginning
+* To end
+
+---
+
+# 7. FORMULA AST
+
+Build a Formula Abstract Syntax Tree.
+
+Convert:
+
+```excel
+=IFERROR(A1+B1*C1,0)
+```
+
+into a tree conceptually:
+
+```text
+IFERROR
+│
+├── ADDITION
+│   │
+│   ├── A1
+│   │
+│   └── MULTIPLICATION
+│       ├── B1
+│       └── C1
+│
+└── 0
+```
+
+Each AST node should contain:
+
+```python
+{
+    "node_id": "...",
+    "function": "IFERROR",
+    "formula_fragment": "...",
+    "arguments": [],
+    "source_cell": "...",
+    "result": ...,
+    "status": "...",
+    "children": []
+}
+```
+
+---
+
+# 8. FUNCTION SUPPORT
+
+Support common Excel functions.
+
+## Lookup
+
+Implement dedicated handlers for:
+
+* VLOOKUP
+* XLOOKUP
+* HLOOKUP
+* LOOKUP
+* INDEX
+* MATCH
+* XMATCH
+* CHOOSE
+
+For every lookup, show:
+
+* lookup value
+* lookup range
+* match mode
+* search mode
+* matched row
+* matched column
+* returned cell
+* returned value
+* duplicate key detection
+* blank result detection
+* approximate match detection
+
+---
+
+# 9. VLOOKUP TRACE
+
+For:
+
+```excel
+=VLOOKUP(A2,Customer_Master!A:D,4,FALSE)
+```
+
+show:
+
+```text
+LOOKUP TRACE
+
+Lookup value:
+CUST1001
+
+Lookup table:
+Customer_Master!A:D
+
+Match mode:
+Exact
+
+Matched row:
+15
+
+Matched key:
+CUST1001
+
+Return column:
+4
+
+Return cell:
+Customer_Master!D15
+
+Result:
+₹50,000
+
+Duplicate key:
+No
+
+Status:
+✓ RESOLVED
+```
+
+---
+
+# 10. XLOOKUP TRACE
+
+Support:
+
+```excel
+=XLOOKUP(A2,Customer!A:A,Customer!D:D,"Not Found")
+```
+
+Show:
+
+```text
+Lookup value
+↓
+Lookup array
+↓
+Matching position
+↓
+Return array
+↓
+Returned cell
+↓
+Result
+```
+
+Also support:
+
+* exact match
+* approximate match
+* wildcard
+* search mode
+* not-found fallback
+
+---
+
+# 11. INDEX/MATCH TRACE
+
+For:
+
+```excel
+=INDEX(Rates!B:D,MATCH(B2,Rates!B:B,0),3)
+```
+
+show:
+
+```text
+B2
+↓
+"India"
+↓
+MATCH
+↓
+Row 8
+↓
+INDEX
+↓
+Rates!D8
+↓
+1.10
+```
+
+---
+
+# 12. SUMIFS TRACE
+
+For every SUMIFS:
+
+Display:
+
+```text
+SUMIFS TRACE
+
+Sum range:
+Commission!D:D
+
+Criteria 1:
+Commission!A:A = CUST1001
+
+Criteria 2:
+Commission!B:B = Loan
+```
+
+Then display matching records:
+
+```text
+Row     Customer     Type       Amount      Match
+12      CUST1001     Loan       1,500       ✓
+27      CUST1001     Loan       1,000       ✓
+40      CUST1002     Loan       5,000       ✗
+```
+
+Then:
+
+```text
+1,500 + 1,000
+= 2,500
+```
+
+This should be represented in the graph as well as the inspector panel.
+
+---
+
+# 13. IF / IFS TRACE
+
+For:
+
+```excel
+=IF(A2>100000,"High","Low")
+```
+
+show:
+
+```text
+CONDITION
+
+A2 > 100000
+
+A2 = 125000
+
+125000 > 100000
+TRUE
+
+Executed branch:
+"High"
+
+Non-executed branch:
+"Low"
+```
+
+The executed branch should be green/orange.
+
+The non-executed branch should be grey.
+
+---
+
+# 14. IFERROR TRACE
+
+For:
+
+```excel
+=IFERROR(A1/B1,0)
+```
+
+show:
+
+```text
+Main expression
+      ↓
+A1 / B1
+      ↓
+Error?
+      │
+   ┌──┴──┐
+  YES    NO
+   │      │
+   ▼      ▼
+   0    Result
+```
+
+If no error:
+
+```text
+Fallback branch = NOT EXECUTED
+```
+
+If an error occurs:
+
+```text
+Main calculation = ERROR
+Fallback branch = EXECUTED
+Final result = 0
+```
+
+---
+
+# 15. HARD-CODED INPUT DETECTION
+
+Detect constants inside formulas.
+
+Example:
+
+```excel
+=A1*1.25+5000
+```
+
+Flag:
+
+```text
+⚠ Hardcoded constant detected
+
+1.25
+Type: Multiplier
+
+5000
+Type: Fixed adjustment
+
+Risk: Medium
+```
+
+The graph should show these as brown nodes.
+
+---
+
+# 16. CROSS-SHEET LINEAGE
+
+The graph must visually distinguish worksheets.
+
+Example:
+
+```text
+Summary
+│
+└── F2
+     │
+     ├──────── Customer_Master
+     │              │
+     │              └── D15
+     │
+     ├──────── Rates
+     │              │
+     │              └── D8
+     │
+     └──────── Commission
+                    │
+                    ├── D12
+                    └── D27
+```
+
+Show worksheet names as containers/groups where possible.
+
+---
+
+# 17. EXTERNAL WORKBOOK REFERENCES
+
+Detect:
+
+```excel
+='[OtherWorkbook.xlsx]Sheet1'!A10
+```
+
+Display:
+
+```text
+⚠ EXTERNAL WORKBOOK DEPENDENCY
+
+Workbook:
+OtherWorkbook.xlsx
+
+Sheet:
+Sheet1
+
+Cell:
+A10
+
+Status:
+External dependency
+```
+
+External references should receive a warning/risk score.
+
+---
+
+# 18. NAMED RANGE SUPPORT
+
+Resolve:
+
+```excel
+=Revenue * TaxRate
+```
+
+Show:
+
+```text
+Revenue
+↓
+Named Range
+↓
+Financials!D20
+↓
+₹100,000
+```
+
+And:
+
+```text
+TaxRate
+↓
+Named Range
+↓
+Assumptions!B7
+↓
+25%
+```
+
+---
+
+# 19. EXCEL TABLE / STRUCTURED REFERENCES
+
+Support formulas such as:
+
+```excel
+=SUMIFS(
+ Sales[Amount],
+ Sales[Country],
+ A2
+)
+```
+
+Resolve:
+
+* table name
+* column name
+* table range
+* matching rows
+* result
+
+---
+
+# 20. DEPENDENCY GRAPH
+
+Build a true dependency graph.
+
+Each node should contain:
+
+```text
+Workbook
+Sheet
+Cell
+Formula
+Value
+Data type
+Node type
+Function type
+Status
+Risk
+```
+
+Each edge should contain:
+
+```text
+Source
+Target
+Relationship
+Argument number
+Formula fragment
+```
+
+Example edge labels:
+
+```text
+lookup value
+lookup array
+return array
+criteria
+sum range
+argument 1
+argument 2
+condition
+true branch
+false branch
+```
+
+---
+
+# 21. UPSTREAM / DOWNSTREAM ANALYSIS
+
+Provide two buttons:
+
+### Trace Backward
+
+```text
+Final Cell
+↓
+Formula
+↓
+Dependencies
+↓
+Source Cells
+↓
+Hardcoded Inputs
+```
+
+### Trace Forward
+
+```text
+Source Cell
+↓
+Dependent Formula
+↓
+Dependent Cell
+↓
+Report
+↓
+Dashboard
+```
+
+---
+
+# 22. IMPACT ANALYSIS
+
+When the user selects a source cell:
+
+```text
+Customer_Master!D15
+```
+
+show:
+
+```text
+WHAT-IF IMPACT
+
+Changing this cell may affect:
+
+Summary!F2
+Summary!F5
+Report!G21
+Dashboard!B12
+```
+
+Highlight all downstream cells.
+
+---
+
+# 23. "WHY IS THIS NUMBER HERE?"
+
+Add a context-menu action:
+
+```text
+Why is this number here?
+```
+
+For:
+
+```text
+₹57,500
+```
+
+produce:
+
+```text
+Summary!F2 = ₹57,500
+
+Calculation:
+
+₹50,000 × 1.10
+= ₹55,000
+
+₹55,000 + ₹2,500
+= ₹57,500
+
+Revenue:
+Customer_Master!D15
+
+Rate:
+Rates!D8
+
+Commission:
+Commission!D12 + Commission!D27
+```
+
+Allow the explanation to be copied.
+
+---
+
+# 24. FORMULA INSPECTOR PANEL
+
+When clicking a node, display a right-hand inspector.
+
+Example:
+
+```text
+FORMULA INSPECTOR
+
+Function:
+VLOOKUP
+
+Formula:
+=VLOOKUP(A2,Customer_Master!A:D,4,FALSE)
+
+Arguments:
+
+1. Lookup Value
+   A2
+   → CUST1001
+
+2. Table Array
+   Customer_Master!A:D
+
+3. Column Index
+   4
+
+4. Match Type
+   FALSE / Exact
+
+Result:
+Customer_Master!D15
+
+Value:
+₹50,000
+
+Status:
+✓ RESOLVED
+```
+
+---
+
+# 25. SOURCE DATA PREVIEW
+
+When a source cell is selected, show:
+
+```text
+SOURCE DATA
+
+Workbook:
+Financial_Model.xlsx
+
+Sheet:
+Customer_Master
+
+Cell:
+D15
+
+Value:
+50,000
+
+Formula:
+None
+
+Type:
+Hardcoded
+
+Row context:
+
+A15      B15       C15        D15
+CUST1001 India     Retail     50,000
+```
+
+Allow opening the relevant source row.
+
+---
+
+# 26. FORMULA RISK ENGINE
+
+Calculate a risk score.
+
+Factors should include:
+
+* formula complexity
+* number of dependencies
+* number of nested functions
+* lookup operations
+* approximate lookups
+* hardcoded constants
+* external references
+* hidden-sheet dependencies
+* duplicate lookup keys
+* error handling
+* volatile functions
+* circular references
+* inconsistent formulas
+* unsupported functions
+
+Example:
+
+```text
+FORMULA RISK
+
+Complexity          80/100
+Lookup Risk         90/100
+Hardcoding          30/100
+External Dependency 70/100
+Error Handling      20/100
+Duplicate Keys     100/100
+
+Overall Risk:
+HIGH
+```
+
+---
+
+# 27. FORMULA ANOMALY DETECTION
+
+Compare formulas in neighboring cells.
+
+Example:
+
+```excel
+F2 = SUM(B2:E2)
+F3 = SUM(B3:E3)
+F4 = SUM(B4:E4)
+F5 = SUM(B5:D5)
+F6 = SUM(B6:E6)
+```
+
+Detect:
+
+```text
+⚠ FORMULA ANOMALY
+
+Cell:
+F5
+
+Expected pattern:
+=SUM(Bn:En)
+
+Actual:
+=SUM(B5:D5)
+
+Missing:
+Column E
+
+Risk:
+HIGH
+```
+
+Use relative-reference normalization to compare formula structures.
+
+---
+
+# 28. FORMULA COMPARISON
+
+Allow users to select two cells.
+
+Example:
+
+```text
+Compare:
+
+Summary!F2
+Summary!F3
+```
+
+Show:
+
+```text
+Formula similarity:
+92%
+
+Common structure:
+IFERROR
+VLOOKUP
+SUMIFS
+
+Differences:
+F2 → Customer_Master!D15
+F3 → Customer_Master!D16
+```
+
+Highlight structural differences.
+
+---
+
+# 29. CIRCULAR REFERENCE DETECTION
+
+Detect:
+
+```text
+A1
+↓
+B1
+↓
+C1
+↓
+A1
+```
+
+Display:
+
+```text
+🔴 CIRCULAR REFERENCE DETECTED
+
+A1 → B1 → C1 → A1
+```
+
+Highlight the entire cycle in red.
+
+---
+
+# 30. ERROR ANALYSIS
+
+Detect:
+
+* #N/A
+* #REF!
+* #VALUE!
+* #DIV/0!
+* #NAME?
+* #NUM!
+* #NULL!
+
+For every error show:
+
+```text
+ERROR
+
+Function:
+VLOOKUP
+
+Problem:
+No matching key found
+
+Lookup value:
+CUST9999
+
+Lookup range:
+Customer_Master!A:A
+
+Fallback:
+IFERROR → 0
+```
+
+---
+
+# 31. VOLATILE FUNCTION DETECTION
+
+Detect functions such as:
+
+* NOW
+* TODAY
+* RAND
+* RANDBETWEEN
+* OFFSET
+* INDIRECT
+
+Flag:
+
+```text
+⚠ VOLATILE / INDIRECT DEPENDENCY
+
+Function:
+INDIRECT
+
+Risk:
+Dependency cannot be fully determined statically.
+```
+
+---
+
+# 32. UNSUPPORTED FUNCTION HANDLING
+
+Never silently fail.
+
+If a function cannot be evaluated:
+
+```text
+⚠ UNSUPPORTED FUNCTION
+
+Function:
+SomeExcelFunction()
+
+The dependency was detected, but exact evaluation is unavailable.
+
+The system must preserve the unresolved node and clearly mark it.
+```
+
+Never invent a result.
+
+---
+
+# 33. EXCEL CACHED VALUES VS ENGINE VALUES
+
+Excel files may contain cached calculation results.
+
+The system must distinguish:
+
+```text
+Excel cached value:
+57,500
+
+Engine-calculated value:
+57,500
+
+Status:
+✓ MATCH
+```
+
+If different:
+
+```text
+⚠ CALCULATION DIFFERENCE
+
+Excel cached:
+57,500
+
+Engine:
+56,500
+
+Difference:
+1,000
+
+Status:
+CRITICAL
+```
+
+Never silently replace one value with the other.
+
+---
+
+# 34. WHAT-IF SIMULATION
+
+Allow the user to change an input:
+
+```text
+Customer_Master!D15
+
+Current:
+50,000
+
+New:
+60,000
+```
+
+Then show:
+
+```text
+Original:
+57,500
+
+Simulated:
+68,500
+
+Impact:
++11,000
+```
+
+Highlight affected nodes.
+
+Do not modify the original workbook.
+
+---
+
+# 35. GRAPH MODES
+
+Provide these visualization modes.
+
+## MODE 1 — Formula Tree
+
+```text
+F2
+│
+IFERROR
+│
+Main Calculation
+├── VLOOKUP
+├── INDEX/MATCH
+└── SUMIFS
+```
+
+## MODE 2 — Execution Flow
+
+```text
+Formula
+↓
+Resolve Inputs
+↓
+Lookup
+↓
+Calculate
+↓
+Condition
+↓
+Error Handling
+↓
+Final Result
+```
+
+## MODE 3 — Data Lineage
+
+```text
+Source Workbook
+↓
+Source Sheet
+↓
+Source Cell
+↓
+Intermediate Cell
+↓
+Final Cell
+```
+
+## MODE 4 — Impact Analysis
+
+```text
+Input
+↓
+Dependents
+↓
+Reports
+↓
+Dashboard
+```
+
+## MODE 5 — Audit View
+
+Show only:
+
+* errors
+* warnings
+* hardcoded values
+* anomalies
+* circular references
+* external dependencies
+
+---
+
+# 36. SEARCH
+
+Add global search.
+
+Search by:
+
+* cell
+* sheet
+* formula
+* function
+* value
+* workbook
+* error
+* warning
+
+Examples:
+
+```text
+Search:
+VLOOKUP
+```
+
+or:
+
+```text
+Search:
+Customer_Master!D15
+```
+
+or:
+
+```text
+Search:
+#REF!
+```
+
+---
+
+# 37. MINI-MAP
+
+For large graphs provide a mini-map.
+
+The user should see:
+
+```text
+FULL WORKBOOK
+────────────────────
+
+Inputs ─── Calculations ─── Reports
+  │           █████           │
+  └───────────████────────────┘
+
+       Current View
+```
+
+Allow quick navigation.
+
+---
+
+# 38. COLLAPSIBLE LEVELS
+
+The user should be able to choose:
+
+### Level 1
+
+Only major functions.
+
+```text
+F2
+↓
+VLOOKUP
+INDEX/MATCH
+SUMIFS
+↓
+57,500
+```
+
+### Level 2
+
+Show source cells.
+
+### Level 3
+
+Show lookup details.
+
+### Level 4
+
+Show matching rows.
+
+### Level 5
+
+Show complete calculation execution.
+
+This is essential for large formulas.
+
+---
+
+# 39. PERFORMANCE
+
+The engine must be designed for large workbooks.
+
+Implement:
+
+* dependency caching
+* formula parsing cache
+* source lookup cache
+* memoization
+* lazy graph expansion
+* lazy evaluation
+* incremental analysis
+* graph virtualization where possible
+
+Do not calculate the entire workbook unnecessarily when the user only asks about one cell.
+
+First determine the dependency subgraph.
+
+---
+
+# 40. WORKBOOK PRESERVATION
+
+When loading a workbook:
+
+* Never modify the original.
+* Never overwrite the original.
+* Preserve formulas.
+* Preserve formatting.
+* Preserve sheet names.
+* Preserve hidden sheets.
+* Preserve named ranges.
+* Preserve Excel tables.
+* Preserve workbook relationships.
+
+Support:
+
+```text
+.xlsx
+.xlsm
+```
+
+If macros exist, preserve them when creating an exported copy.
+
+---
+
+# 41. USER INTERFACE
+
+Build a professional desktop/web-style interface.
+
+Recommended layout:
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ Excel Formula Forensics                                          │
+├──────────────────────────────────────────────────────────────────┤
+│ Workbook │ Sheet │ Cell │ Analyze │ Search                       │
+├──────────────────────────────────────┬───────────────────────────┤
+│                                      │                           │
+│                                      │       INSPECTOR           │
+│                                      │                           │
+│              GRAPH                   │       Function            │
+│                                      │       Formula             │
+│                                      │       Arguments           │
+│                                      │       Result               │
+│                                      │       Source               │
+│                                      │       Risk                 │
+│                                      │                           │
+├──────────────────────────────────────┴───────────────────────────┤
+│ Step 7/18 │ Back │ Step │ Run │ Reset │ Expand │ Collapse        │
+├──────────────────────────────────────────────────────────────────┤
+│ Formula Transformation / Execution Trace                         │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# 42. DASHBOARD
+
+Before analyzing a cell, provide a workbook dashboard:
+
+```text
+WORKBOOK HEALTH
+
+Sheets:
+27
+
+Formula Cells:
+84,921
+
+External References:
+12
+
+Errors:
+17
+
+Warnings:
+43
+
+Circular References:
+2
+
+Hardcoded Formula Constants:
+182
+
+Formula Anomalies:
+31
+
+High-Risk Formulas:
+14
+```
+
+Clicking a metric should show the relevant cells.
+
+---
+
+# 43. AUDIT REPORT
+
+Generate a complete audit report.
+
+Example:
+
+```text
+EXCEL FORMULA FORENSICS REPORT
+
+Workbook:
+Financial_Model.xlsx
+
+Target:
+Summary!F2
+
+Final Value:
+₹57,500
+
+Formula Complexity:
+HIGH
+
+Dependencies:
+17
+
+Hardcoded Inputs:
+3
+
+Lookup Operations:
+3
+
+Cross-Sheet References:
+4
+
+External References:
+0
+
+Errors:
+0
+
+Warnings:
+1
+
+Overall Risk:
+MEDIUM
+```
+
+Then:
+
+```text
+FINDINGS
+
+✓ VLOOKUP uses exact match
+✓ INDEX/MATCH successfully resolved
+✓ SUMIFS successfully resolved
+✓ No circular dependency
+
+⚠ Duplicate customer key detected
+```
+
+---
+
+# 44. EXPORTS
+
+Allow exporting:
+
+* HTML
+* Excel
+* CSV
+* JSON
+* PDF
+
+The JSON output should contain machine-readable lineage.
+
+Example:
+
+```json
+{
+  "target": "Summary!F2",
+  "formula": "=IFERROR(...)",
+  "result": 57500,
+  "dependencies": [],
+  "execution_steps": [],
+  "warnings": [],
+  "errors": []
+}
+```
+
+---
+
+# 45. EXCEL AUDIT OUTPUT
+
+Generate an Excel audit workbook containing:
+
+### Sheet 1 — Summary
+
+Workbook health and target formula summary.
+
+### Sheet 2 — Formula Breakdown
+
+Every formula component.
+
+### Sheet 3 — Execution Trace
+
+Step-by-step evaluation.
+
+### Sheet 4 — Dependency Tree
+
+Upstream dependencies.
+
+### Sheet 5 — Source Lineage
+
+Source cells.
+
+### Sheet 6 — Lookup Trace
+
+All lookup operations.
+
+### Sheet 7 — Matching Records
+
+Records contributing to SUMIFS/COUNTIFS/etc.
+
+### Sheet 8 — Exceptions
+
+Errors and warnings.
+
+### Sheet 9 — Formula Anomalies
+
+Inconsistent formulas.
+
+### Sheet 10 — Impact Analysis
+
+Downstream dependencies.
+
+---
+
+# 46. TECHNICAL ARCHITECTURE
+
+Separate the application into modules.
+
+```text
+excel_formula_forensics/
+│
+├── app.py
+│
+├── engine/
+│   ├── workbook_loader.py
+│   ├── formula_parser.py
+│   ├── formula_ast.py
+│   ├── dependency_engine.py
+│   ├── evaluation_engine.py
+│   ├── lookup_engine.py
+│   ├── lineage_engine.py
+│   ├── impact_engine.py
+│   ├── risk_engine.py
+│   ├── anomaly_engine.py
+│   └── comparison_engine.py
+│
+├── graph/
+│   ├── graph_builder.py
+│   ├── node_types.py
+│   ├── edge_types.py
+│   ├── graph_layout.py
+│   └── renderer.py
+│
+├── audit/
+│   ├── audit_report.py
+│   ├── findings.py
+│   └── workbook_health.py
+│
+├── ui/
+│   ├── dashboard.py
+│   ├── graph_view.py
+│   ├── inspector.py
+│   ├── debugger.py
+│   └── controls.py
+│
+├── exports/
+│   ├── html_export.py
+│   ├── excel_export.py
+│   ├── json_export.py
+│   ├── csv_export.py
+│   └── pdf_export.py
+│
+└── tests/
+    ├── test_vlookup.py
+    ├── test_xlookup.py
+    ├── test_index_match.py
+    ├── test_sumifs.py
+    ├── test_if.py
+    ├── test_iferror.py
+    ├── test_dependencies.py
+    ├── test_circular.py
+    └── test_anomalies.py
+```
+
+---
+
+# 47. PYTHON TECHNOLOGY
+
+Use Python as the core backend.
+
+Recommended libraries where appropriate:
+
+* openpyxl — Excel workbook reading/writing
+* formulas / Excel formula parser library if reliable
+* tokenizer/parser implemented internally where required
+* pandas — tabular analysis
+* networkx — dependency graph
+* FastAPI/Flask only if a web backend is genuinely necessary
+
+However, prioritize a simple architecture.
+
+Do not make the application dependent on unnecessary infrastructure.
+
+The initial version should be capable of running locally.
+
+---
+
+# 48. IMPORTANT CALCULATION PRINCIPLE
+
+Do NOT assume that parsing a formula means it has been evaluated.
+
+Separate:
+
+```text
+PARSING
+```
+
+from:
+
+```text
+DEPENDENCY RESOLUTION
+```
+
+from:
+
+```text
+CALCULATION
+```
+
+from:
+
+```text
+VISUALIZATION
+```
+
+The pipeline should be:
+
+```text
+Excel Workbook
+      ↓
+Workbook Loader
+      ↓
+Formula Parser
+      ↓
+AST
+      ↓
+Dependency Engine
+      ↓
+Evaluation Engine
+      ↓
+Lineage Engine
+      ↓
+Risk / Audit Engine
+      ↓
+Graph Builder
+      ↓
+Interactive Visualization
+      ↓
+Audit Report
+```
+
+---
+
+# 49. DO NOT FAKE RESULTS
+
+This is critical.
+
+The system must never invent:
+
+* lookup matches
+* values
+* rows
+* calculations
+* dependencies
+* formula results
+
+If something cannot be evaluated:
+
+```text
+UNRESOLVED
+```
+
+must be shown.
+
+For example:
+
+```text
+⚠ Cannot determine INDIRECT reference statically.
+
+Source:
+Summary!F2
+
+Function:
+INDIRECT
+
+Status:
+PARTIALLY RESOLVED
+```
+
+---
+
+# 50. EXAMPLE TARGET
+
+Use this formula as the initial demonstration:
+
+```excel
+=IFERROR(
+ VLOOKUP(A2,Customer_Master!A:D,4,FALSE)
+ *
+ INDEX(Rates!B:D,MATCH(B2,Rates!B:B,0),3)
+ +
+ SUMIFS(
+   Commission!D:D,
+   Commission!A:A,A2,
+   Commission!B:B,"Loan"
+ ),
+0
+)
+```
+
+Sample data:
+
+```text
+Summary!A2
+CUST1001
+
+Summary!B2
+India
+
+Customer_Master!A15
+CUST1001
+
+Customer_Master!D15
+50,000
+
+Rates!B8
+India
+
+Rates!D8
+1.10
+
+Commission!A12
+CUST1001
+
+Commission!B12
+Loan
+
+Commission!D12
+1,500
+
+Commission!A27
+CUST1001
+
+Commission!B27
+Loan
+
+Commission!D27
+1,000
+```
+
+Expected:
+
+```text
+VLOOKUP = 50,000
+
+MATCH = row 8
+
+INDEX = 1.10
+
+50,000 × 1.10
+= 55,000
+
+SUMIFS
+= 1,500 + 1,000
+= 2,500
+
+55,000 + 2,500
+= 57,500
+
+IFERROR
+= 57,500
+```
+
+---
+
+# 51. FINAL GRAPH REQUIREMENT
+
+The final graph should communicate this entire process visually:
+
+```text
+                         ┌──────────────────┐
+                         │ SUMMARY!F2       │
+                         │ ₹57,500          │
+                         └────────┬─────────┘
+                                  │
+                         ┌────────▼────────┐
+                         │ IFERROR          │
+                         │ No error         │
+                         └────────┬─────────┘
+                                  │
+              ┌───────────────────┼──────────────────┐
+              │                   │                  │
+              ▼                   ▼                  ▼
+        ┌───────────┐       ┌────────────┐     ┌──────────┐
+        │ VLOOKUP   │       │INDEX/MATCH │     │ SUMIFS   │
+        └─────┬─────┘       └──────┬─────┘     └────┬─────┘
+              │                    │                 │
+              ▼                    ▼                 ▼
+        CUST1001                 India          CUST1001
+              │                    │             + Loan
+              ▼                    ▼                 │
+       Customer_Master          MATCH              ▼
+              │                    │          Matching rows
+              ▼                    ▼           ┌────┴────┐
+           D15                   Row 8          │         │
+              │                    │            ▼         ▼
+              ▼                    ▼          D12       D27
+          ₹50,000                 1.10        1,500     1,000
+              │                    │            │         │
+              └──────────┬─────────┘            └────┬────┘
+                         ▼                            ▼
+                  50,000 × 1.10                  SUMIFS
+                         │                       = 2,500
+                         ▼                            │
+                      55,000                         │
+                         │                            │
+                         └────────────┬───────────────┘
+                                      ▼
+                                  57,500
+                                      │
+                                      ▼
+                              ✓ FINAL RESULT
+```
+
+Every node must be interactive.
+
+Every edge must explain the relationship.
+
+Every calculation must have a trace.
+
+Every source value must have lineage.
+
+Every warning must be explainable.
+
+---
+
+# 52. DEVELOPMENT PHASES
+
+Build in phases.
+
+## Phase 1
+
+Implement:
+
+* workbook loading
+* target cell selection
+* formula parsing
+* dependency extraction
+* AST
+* interactive graph
+* color system
+* node inspector
+
+## Phase 2
+
+Implement:
+
+* VLOOKUP
+* XLOOKUP
+* INDEX/MATCH
+* SUMIFS
+* IF
+* IFERROR
+* arithmetic evaluation
+* step-by-step debugger
+* formula transformation
+
+## Phase 3
+
+Implement:
+
+* source lineage
+* matching-record visualization
+* cross-sheet lineage
+* named ranges
+* structured references
+* hardcoded input detection
+* external references
+
+## Phase 4
+
+Implement:
+
+* anomaly detection
+* formula comparison
+* circular reference detection
+* risk scoring
+* impact analysis
+* reverse lineage
+
+## Phase 5
+
+Implement:
+
+* workbook-wide analysis
+* dashboard
+* what-if simulation
+* audit reports
+* Excel/HTML/JSON/PDF exports
+* performance optimization
+
+---
+
+# 53. QUALITY REQUIREMENTS
+
+The application must:
+
+* be modular
+* be maintainable
+* have clear error handling
+* never silently fail
+* never invent values
+* preserve source workbook
+* support large workbooks
+* provide explainable calculations
+* provide deterministic results
+* have unit tests
+* have clear logging
+* clearly distinguish calculated vs cached values
+* clearly distinguish resolved vs unresolved dependencies
+
+---
+
+# 54. MOST IMPORTANT DESIGN PRINCIPLE
+
+Do not build a simple dependency visualizer.
+
+Build a:
+
+**FORMULA EXECUTION FORENSICS ENGINE**
+
+The user should be able to start with:
+
+```text
+Summary!F2 = ₹57,500
+```
+
+and ask:
+
+> "Why is this ₹57,500?"
+
+The application should answer:
+
+```text
+Because:
+
+Customer_Master!D15
+= ₹50,000
+
+×
+
+Rates!D8
+= 1.10
+
+=
+
+₹55,000
+
++
+
+Commission!D12
+= ₹1,500
+
++
+
+Commission!D27
+= ₹1,000
+
+=
+
+₹57,500
+```
+
+And the graph should visually prove every step.
+
+The final product should feel like:
+
+**Excel Formula Evaluator + debugger + dependency graph + data lineage + financial model audit system.**
+
+Do not stop at a static graph. The graph must be the interactive interface through which the user can investigate the entire calculation.
