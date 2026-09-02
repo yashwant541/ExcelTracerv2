@@ -1,0 +1,169 @@
+<div id="app">
+  <header class="topbar">
+    <div class="brand" id="brand-home">
+      <span class="brand-mark">&#128300;</span>
+      <span class="brand-text">Excel Formula Tracer</span>
+    </div>
+    <nav class="topnav">
+      <span class="who" id="who"></span>
+      <button class="link-btn hidden" id="nav-new">Open another workbook</button>
+    </nav>
+  </header>
+
+  <main class="content">
+    <!-- ===================== OPEN ===================== -->
+    <section id="view-open" class="view">
+      <div class="view-head">
+        <h1>Open a workbook</h1>
+        <p class="muted">Point at an .xlsx / .xlsm workbook that carries live Excel formulas and walk any
+          cell's calculation node by node.</p>
+      </div>
+
+      <div class="grid-2" style="align-items:start;gap:20px">
+        <div class="card">
+          <h3 style="margin:0 0 4px">From a managed folder</h3>
+          <p class="muted small" id="folder-hint">Pick a folder, then a file.</p>
+          <label>Managed folder</label>
+          <select id="folder-select"></select>
+          <label>Or paste a folder id</label>
+          <input type="text" id="folder-id" placeholder="e.g. aB3dK9Zx">
+          <label>File</label>
+          <select id="folder-file"></select>
+          <label>Or type a path / filename</label>
+          <input type="text" id="folder-path" placeholder="/subfolder/report.xlsx">
+          <div class="row-actions" style="justify-content:flex-start">
+            <button class="btn ghost small" id="folder-list">List files</button>
+            <button class="btn" id="folder-open">Open &amp; trace</button>
+          </div>
+          <p class="err" id="folder-err"></p>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 4px">Upload a file</h3>
+          <p class="muted small">Nothing is stored &mdash; the workbook is parsed in memory for this session only.</p>
+          <div class="dropzone" id="dropzone" style="margin-top:10px">
+            <input type="file" id="file-input" hidden accept=".xlsx,.xlsm">
+            <p><strong>Drop a workbook here</strong> or <button class="link-btn" id="browse-btn">browse</button></p>
+          </div>
+          <p class="err" id="upload-err"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== TRACE ===================== -->
+    <section id="view-trace" class="view hidden">
+      <div class="view-head">
+        <h1 id="trace-title">Trace</h1>
+        <p class="muted" id="trace-summary"></p>
+      </div>
+
+      <div class="trace-layout">
+        <aside class="trace-rail">
+          <div class="admin-section">
+            <h3>Row journey</h3>
+            <div class="field"><label>Sheet</label><select id="tr-sheet"></select></div>
+            <div class="field"><label>Row number</label>
+              <input type="text" id="tr-row" inputmode="numeric" placeholder="e.g. 2"></div>
+            <div class="row-actions" style="justify-content:flex-start;margin-top:6px">
+              <button class="btn small" id="tr-go">Show row</button>
+            </div>
+          </div>
+          <div class="admin-section">
+            <h3>Trace one cell</h3>
+            <div class="field"><label>Cell (Sheet!A1 or A1)</label>
+              <input type="text" id="tr-cell" placeholder="RWA!E2"></div>
+            <div class="row-actions" style="justify-content:flex-start;margin-top:6px">
+              <button class="btn small" id="tr-cell-go">Open trace</button>
+            </div>
+          </div>
+          <div class="admin-section">
+            <h3>Mismatch scan</h3>
+            <div class="field"><label>Left column</label><input type="text" id="tr-left" placeholder="name or letter"></div>
+            <div class="field"><label>Right column</label><input type="text" id="tr-right" placeholder="name or letter"></div>
+            <div class="row-actions" style="justify-content:flex-start;margin-top:6px">
+              <button class="btn ghost small" id="tr-scan">Scan</button>
+            </div>
+            <div id="tr-mismatch-list"></div>
+          </div>
+          <div class="admin-section">
+            <h3>Findings</h3>
+            <div id="tr-findings"></div>
+          </div>
+          <div class="admin-section">
+            <h3>Formulas</h3>
+            <input type="text" id="tr-fx-filter" placeholder="filter by cell / function">
+            <div id="tr-formulas" style="max-height:260px;overflow:auto;margin-top:8px"></div>
+          </div>
+        </aside>
+        <div class="trace-main">
+          <div id="tr-body"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== FLOWCHART ===================== -->
+    <section id="view-flow" class="view hidden">
+      <button class="link-btn back" id="flow-back">&larr; Back to trace</button>
+      <div class="view-head">
+        <h1 id="flow-title">Formula flowchart</h1>
+        <p class="muted" id="flow-sub"></p>
+      </div>
+
+      <div class="formula-box">
+        <div class="formula" id="flow-formula"></div>
+        <div class="legend" id="flow-legend"></div>
+        <div class="muted small" style="margin-top:10px">
+          Drag to pan &middot; scroll to zoom &middot; click a box for detail &middot;
+          click a <span style="color:var(--accent);font-weight:600">blue cell</span> to re-root the chart on it.
+        </div>
+      </div>
+
+      <div class="flow-wrap">
+        <div class="flow-tools">
+          <button class="icon-btn" id="flow-zin" title="Zoom in">+</button>
+          <button class="icon-btn" id="flow-zout" title="Zoom out">&minus;</button>
+          <button class="icon-btn" id="flow-fit" title="Fit">&#9634;</button>
+          <label class="chk"><input type="checkbox" id="flow-hide-const"> hide constants</label>
+          <label class="chk"><input type="checkbox" id="flow-only-taken" checked> only the taken path</label>
+        </div>
+        <div class="flow-canvas" id="flow-canvas"></div>
+        <div class="flow-detail hidden" id="flow-detail"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- trace drawer -->
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-head">
+      <div>
+        <div id="d-crumbs" class="crumbs"></div>
+        <div class="t-headline">
+          <span id="d-col" class="t-col"></span><span class="t-eq">=</span>
+          <span id="d-val" class="t-val"></span><span id="d-dtype" class="chip dtype"></span>
+        </div>
+        <div id="d-sub" class="muted small"></div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="icon-btn" id="d-flow" title="Open as flowchart">&#9906;</button>
+        <button class="icon-btn" id="d-close" title="Close" style="font-size:17px">&times;</button>
+      </div>
+    </div>
+    <div id="d-flags" class="flags"></div>
+    <div class="tabs" id="d-tabs">
+      <button data-tab="tree" class="active">Tree</button>
+      <button data-tab="flow">Value flow</button>
+      <button data-tab="explain">Explain</button>
+      <button data-tab="graph">Precedents</button>
+      <button data-tab="source">Source</button>
+    </div>
+    <div class="tab-body">
+      <div id="d-tab-tree" class="tabpane"></div>
+      <div id="d-tab-flow" class="tabpane hidden"></div>
+      <div id="d-tab-explain" class="tabpane hidden"></div>
+      <div id="d-tab-graph" class="tabpane hidden"></div>
+      <div id="d-tab-source" class="tabpane hidden"></div>
+    </div>
+  </div>
+  <div id="drawer-scrim" class="scrim hidden"></div>
+  <div class="toast-wrap" id="toast-wrap"></div>
+</div>
