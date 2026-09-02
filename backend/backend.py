@@ -28,7 +28,13 @@ except Exception:  # noqa: BLE001
     dataiku = None
     _HAS_DATAIKU = False
 
+import excel_deep_trace
 from excel_deep_trace import ExcelDeepTraceEngine
+
+_ENGINE_BUILD = getattr(excel_deep_trace, "ENGINE_BUILD", "unknown")
+_ENGINE_OUTDATED = ("The excel_deep_trace.py on the project's Python libraries is out of "
+                    "date for this webapp. Redeploy the whole python-lib/ folder from this "
+                    "bundle and Restart the backend.")
 
 try:  # pragma: no cover - Dataiku provides `app`
     app  # type: ignore  # noqa: F821
@@ -53,6 +59,14 @@ def _session(sid):
         raise KeyError("Trace session not found - the backend may have restarted. "
                        "Open the workbook again.")
     return s
+
+
+def _engine(sid, need=()):
+    eng = _session(sid)["engine"]
+    missing = [m for m in need if not hasattr(eng, m)]
+    if missing:
+        raise RuntimeError("%s (missing: %s)" % (_ENGINE_OUTDATED, ", ".join(missing)))
+    return eng
 
 
 def _open_bytes(content, filename):
@@ -81,6 +95,8 @@ def _open_bytes(content, filename):
 @app.route("/api/health", methods=["GET"])
 def api_health():
     return jsonify({"success": True, "dataiku": _HAS_DATAIKU,
+                    "engine_build": _ENGINE_BUILD,
+                    "engine_ok": hasattr(ExcelDeepTraceEngine, "formula_transformation"),
                     "time": datetime.utcnow().isoformat() + "Z"})
 
 
@@ -180,7 +196,7 @@ def api_journey():
 def api_transformation():
     body = request.get_json(force=True, silent=True) or {}
     try:
-        eng = _session(body["session_id"])["engine"]
+        eng = _engine(body["session_id"], need=["formula_transformation"])
         return jsonify({"success": True,
                         "transformation": eng.formula_transformation(body["cell"])})
     except KeyError as exc:
@@ -193,7 +209,7 @@ def api_transformation():
 def api_explain_plain():
     body = request.get_json(force=True, silent=True) or {}
     try:
-        eng = _session(body["session_id"])["engine"]
+        eng = _engine(body["session_id"], need=["explain_plain"])
         return jsonify({"success": True, **eng.explain_plain(body["cell"])})
     except KeyError as exc:
         return _err(str(exc), 404)

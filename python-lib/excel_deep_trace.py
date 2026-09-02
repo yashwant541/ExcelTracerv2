@@ -42,7 +42,10 @@ from webapp_core.formula_trace import (
     _repr, _dtype, _json, _truthy, _is_empty, _num, _is_nan, _values_close,
 )
 
-ENGINE_BUILD = "rwa-deep-trace 2026.09b"  # bump when the API surface changes
+ENGINE_BUILD = "rwa-deep-trace 2026.09c"  # bump when the API surface changes
+ENGINE_CAPS = ["scan", "records", "value", "trace", "branch_analysis", "lookup_analysis",
+               "expression_tree", "row_journey", "compare_cells", "sheet_columns",
+               "mismatch_rows", "evaluate_sheet", "formula_transformation", "explain_plain"]
 MAX_EXPANDED_RANGE_DEFAULT = 10000
 MAX_TREE_DEPTH_DEFAULT = 8
 
@@ -1350,6 +1353,7 @@ class ExcelDeepTraceEngine:
                            "formula_cells": n})
         return {
             "engine_build": ENGINE_BUILD,
+            "engine_caps": ENGINE_CAPS,
             "filename": self.filename,
             "sheet_names": list(self.wb_formula.sheetnames),
             "sheets": sheets,

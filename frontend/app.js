@@ -601,6 +601,7 @@
   }
 
   async function showFlowchart(cell) {
+    if (!S.summary || !S.summary.engine_build) { toast("Redeploy excel_deep_trace.py and restart the backend.", "err"); return; }
     try {
       const r = await call("/api/tree", { method: "POST", json: { session_id: S.sid, cell, max_depth: 24 } });
       FLOW = { cell, tree: r.tree, sel: null };
@@ -619,7 +620,15 @@
   // ================================================================ STEPS / DEBUGGER
   let STEPS = { data: null, i: 0, timer: null };
 
+  function engineOutdated() {
+    const caps = (S.summary && S.summary.engine_caps) || [];
+    if (S.summary && S.summary.engine_build && (!caps.length || caps.indexOf("formula_transformation") >= 0)) return false;
+    toast("The excel_deep_trace.py on the project libraries is out of date — redeploy python-lib/ and restart the backend.", "err");
+    return true;
+  }
+
   async function showSteps(cell) {
+    if (engineOutdated()) return;
     try {
       const [tr, why] = await Promise.all([
         call("/api/transformation", { method: "POST", json: { session_id: S.sid, cell } }),
